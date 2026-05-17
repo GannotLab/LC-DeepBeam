@@ -1,0 +1,246 @@
+# ==============================================================================
+# DNN-Based Beamformer Master Configuration File
+# 
+# This file is parsed by Hydra to dynamically configure the neural network, 
+# acoustic parameters, training loops, and loss schedules.
+# ==============================================================================
+
+SavedModel: 1                 # 0 = Train a new model, 1 = Run Evaluation Suite
+
+# ==============================================================================
+# 1. Master Architecture & Acoustic Flags
+# ==============================================================================
+params:
+  use_3_speakers: 1           # 1 = Three Speakers (Target + 2 Interferers), 0 = Two Speakers
+  one_pass_two_nulls: 1       # (If 3 Spk): 1 = (Spk 1 Pass, Spk 2 & 3 Null). 0 = (Spk 1 & 3 Pass, Spk 2 Null).
+  win_length: 512             # STFT Window Length
+  R: ${params.win_length}//4  # STFT Hop Length (Hydra dynamic interpolation)
+  T: 8                        # Total Signal Length in seconds (4 for training, 4 or 8 for testing)
+  M: 8                        # Number of Microphones in the array
+  fs: 16000                   # Sample rate (Hz)
+  ck: 343                     # Speed of sound (m/s)
+  mic_ref: 4                  # Reference microphone index (1-based)
+  noise_only_time: 0.5        # Duration (seconds) of initial noise-only head
+
+modelParams:
+  EnableSkipAttention: 1      # 1 = Enable Cross-Attention in U-Net skip connections
+  activationStage1: tanh      # Activation function for the spatial weights
+  channelsStage1: ${params.M} # Base channel multiplier (scales with mic count)
+  use_true_rirs: 1            # 1 = Oracle (True RIRs), 0 = Blind (GEVD)
+  DUAL_MODEL: 1               # 1 = Enable dual-input architecture
+
+
+# ==============================================================================
+# 2. Hardware Device Allocation
+# ==============================================================================
+device:
+  device_num: 0               # CUDA GPU Index
+
+
+# ==============================================================================
+# 3. Dynamic Loss Schedules (Epoch-Based)
+# ==============================================================================
+loss:
+  # --- SI-SDR Base Objective ---
+  lambda_sisdr_schedule:
+    - {epoch: 0,  value: 1.0}
+
+  # --------------------------------------------------
+  # TWO SPEAKER SCHEDULES (Target + 1 Interferer)
+  # --------------------------------------------------
+  # Non-reverberant
+  lambda_pass_schedule_2spk:
+    - {epoch: 0,  value: 0.0}
+    - {epoch: 10, value: 0.001}
+    - {epoch: 12, value: 0.002}
+    - {epoch: 14, value: 0.003}
+    - {epoch: 16, value: 0.004}
+    - {epoch: 18, value: 0.005}
+    - {epoch: 20, value: 0.006}
+    - {epoch: 22, value: 0.007}
+    - {epoch: 24, value: 0.008}
+    - {epoch: 26, value: 0.009}
+    - {epoch: 30, value: 0.010}
+  
+  # Reverberant
+  # lambda_pass_schedule_2spk:
+  #   - {epoch: 0,  value: 0.0}
+  #   - {epoch: 15, value: 0.001}
+  #   - {epoch: 17, value: 0.002}
+  #   - {epoch: 19, value: 0.003}
+  #   - {epoch: 21, value: 0.004}
+  #   - {epoch: 23, value: 0.005}
+  #   - {epoch: 25, value: 0.006}
+  #   - {epoch: 27, value: 0.007}
+  #   - {epoch: 29, value: 0.008}
+  #   - {epoch: 31, value: 0.009}
+  #   - {epoch: 35, value: 0.010}
+
+  # No RTFs
+  # lambda_pass_schedule_2spk:
+  #   - {epoch: 0,  value: 0.0}
+  
+  # Non-reverberant
+  lambda_null_schedule_2spk:
+    - {epoch: 0,  value: 0.0}
+    - {epoch: 10, value: 0.002}
+    - {epoch: 15, value: 0.010}
+    - {epoch: 20, value: 0.018}
+    - {epoch: 25, value: 0.026}
+    - {epoch: 30, value: 0.034}
+    - {epoch: 35, value: 0.042}
+    - {epoch: 40, value: 0.050}
+    - {epoch: 45, value: 0.058}
+    - {epoch: 50, value: 0.066}
+  
+  # Reverberant
+  # lambda_null_schedule_2spk:
+  #   - {epoch: 0,  value: 0.0}
+  #   - {epoch: 15, value: 0.001}
+  #   - {epoch: 25, value: 0.004}
+  #   - {epoch: 35, value: 0.007}
+  #   - {epoch: 45, value: 0.010}
+
+  # No RTFs
+  # lambda_null_schedule_2spk:
+  #   - {epoch: 0,  value: 0.0}
+
+  # --------------------------------------------------
+  # THREE SPEAKER SCHEDULES (Target + 2 Interferers)
+  # --------------------------------------------------
+  lambda_pass_schedule_3spk:
+    - {epoch: 0,  value: 0.0}
+    - {epoch: 15, value: 0.001}
+    - {epoch: 17, value: 0.002}
+    - {epoch: 19, value: 0.003}
+    - {epoch: 21, value: 0.004}
+    - {epoch: 23, value: 0.005}
+    - {epoch: 25, value: 0.006}
+    - {epoch: 27, value: 0.007}
+    - {epoch: 29, value: 0.008}
+    - {epoch: 31, value: 0.009}
+    - {epoch: 35, value: 0.010}
+  
+  # No RTFs
+  # lambda_pass_schedule_3spk:
+  #   - {epoch: 0,  value: 0.0}
+  
+  # Non-reverberant
+  lambda_null1_schedule_3spk:
+    - {epoch: 0,  value: 0.0}
+    - {epoch: 15, value: 0.001}
+    - {epoch: 20, value: 0.005}
+    - {epoch: 30, value: 0.010}
+    - {epoch: 40, value: 0.015}
+    - {epoch: 50, value: 0.020}
+  
+  # Reverberant
+  # lambda_null1_schedule_3spk:
+  #   - {epoch: 0,  value: 0.0}
+  #   - {epoch: 15, value: 0.001}
+  #   - {epoch: 25, value: 0.004}
+  #   - {epoch: 35, value: 0.007}
+  #   - {epoch: 45, value: 0.010}
+
+  # No RTFs
+  # lambda_null1_schedule_3spk:
+  #   - {epoch: 0,  value: 0.0}
+
+  # Non-reverberant
+  lambda_null2_schedule_3spk:
+    - {epoch: 0,  value: 0.0}
+    - {epoch: 25, value: 0.0025}
+    - {epoch: 30, value: 0.005}
+    - {epoch: 35, value: 0.010}
+    - {epoch: 45, value: 0.015}
+    - {epoch: 55, value: 0.020}
+  
+  # Reverberant
+  # lambda_null2_schedule_3spk:
+  #   - {epoch: 0,  value: 0.0}
+  #   - {epoch: 20, value: 0.001}
+  #   - {epoch: 30, value: 0.004}
+  #   - {epoch: 40, value: 0.007}
+  #   - {epoch: 50, value: 0.010}
+
+  # No RTFs
+  # lambda_null2_schedule_3spk:
+  #   - {epoch: 0,  value: 0.0}
+
+
+# ==============================================================================
+# 4. Paths & Directories
+# ==============================================================================
+data_set_path: /dsi/gannot-lab/gannot-lab1/datasets/Ilai_data/ 
+
+# --- TWO SPEAKER OUTPUT PATHS ---
+model_path_2spk:  /home/dsi/engelor1/DNN_Based_Beamformer/Code/Trained_Models/02_05_Rev_Two_Speakers_True_RTFs_Fixed
+folder_name_2spk: /home/dsi/engelor1/DNN_Based_Beamformer/Code/Results_Reverberant_Environment/02_05_Rev_Two_Speakers_True_RTFs_Fixed
+
+# --- THREE SPEAKER OUTPUT PATHS ---
+model_path_3spk:  /home/dsi/engelor1/DNN_Based_Beamformer/Code/Trained_Models/02_05_Rev_Three_Speakers_True_RTFs_Fixed 
+folder_name_3spk: /home/dsi/engelor1/DNN_Based_Beamformer/Code/Results_Reverberant_Environment/02_05_Rev_Three_Speakers_True_RTFs_Fixed
+
+paths:
+  rev_env: False
+  train_path:              /dsi/gannot-lab/gannot-lab1/datasets/Ilai_data/Tracking_Signal_Gen_Data/Train_Rev_Signal_Gen_with_rir
+  test_path:               /dsi/gannot-lab/gannot-lab1/datasets/Ilai_data/Tracking_Signal_Gen_Data/Test_Rev_Signal_Gen_with_rir
+  babble_noise_train_path: /dsi/gannot-lab/gannot-lab1/datasets/Ilai_data/Babble_Noise/Train
+  babble_noise_test_path:  /dsi/gannot-lab/gannot-lab1/datasets/Ilai_data/Babble_Noise/Test
+  
+  # Note: These values are dynamically overwritten in main_model.py based on use_3_speakers
+  results_path:   "DYNAMIC"
+  modelData_path: "DYNAMIC"
+  log_path:       "DYNAMIC"
+
+
+# ==============================================================================
+# 5. Experiment Tracking (Weights & Biases)
+# ==============================================================================
+wandb:
+  project_name: "DNN_Based_Beamformer"
+  entity_2spk:  "engelori55-bar-ilan-university"
+  entity_3spk:  "engelbar73-bar-ilan-university"
+
+
+# ==============================================================================
+# 6. Training Hyperparameters
+# ==============================================================================
+model_hp:
+  train_size_spilt:    0.75
+  val_size_spilt:      0.25
+  epochs:              300
+  data_loader_shuffle: False
+  test_loader_shuffle: False
+  batchSize_2spk:      8      # Use 4 for Reverberant Environments
+  batchSize_3spk:      4
+
+
+# ==============================================================================
+# 7. Optimizer Settings
+# ==============================================================================
+optimizer:
+  optimizer:          Adam
+  weight_decay:       0.0
+  learning_rate_2spk: 4.0e-4  # Use 7.5e-4 for Reverberant Environments
+  learning_rate_3spk: 7.5e-4
+
+
+# ==============================================================================
+# 8. CSV Paths (Ignore the word 'tracking'; It's a legacy name)
+# ==============================================================================
+dataset:
+  df_path_train_2spk: /home/dsi/engelor1/DNN_Based_Beamformer/Code/create_dataset_python/room_parameters_tracking_train_speechFromTrain.csv
+  df_path_test_2spk:  /home/dsi/engelor1/DNN_Based_Beamformer/Code/create_dataset_python/room_parameters_tracking_test.csv
+  df_path_train_3spk: /home/dsi/engelba3/DNN_Based_Beamformer/Code/create_dataset_python/room_parameters_tracking_train_speechFromTrain.csv
+  df_path_test_3spk:  /home/dsi/engelba3/DNN_Based_Beamformer/Code/create_dataset_python/room_parameters_tracking_test.csv
+
+
+# ==============================================================================
+# 9. Hydra Native Settings
+# ==============================================================================
+hydra:
+  run:
+    dir: outputs_L1/${now:%Y-%m-%d}/${now:%H-%M-%S}
+  job:
+    chdir: True
